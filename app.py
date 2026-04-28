@@ -2,13 +2,14 @@ import streamlit as st
 import webbrowser
 import yfinance as yf
 import pandas as pd
+import time
 
 st.set_page_config(page_title="Smart Stock Scanner", layout="centered")
 
-st.title("📊 Smart Stock Scanner (Pro Mode)")
-st.write("Breakout + RSI + Volume + Trend Filter")
+st.title("📊 Smart Stock Scanner (Auto Mode)")
+st.write("Breakout + RSI + Volume + Trend Filter (Auto Scan Every 5 min)")
 
-# Expanded stock list (NIFTY style)
+# Stocks to scan
 stocks = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "LT.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "ITC.NS",
@@ -16,7 +17,7 @@ stocks = [
     "SUNPHARMA.NS", "TITAN.NS", "ULTRACEMCO.NS", "NESTLEIND.NS"
 ]
 
-# RSI
+# RSI calculation
 def calculate_rsi(close, period=14):
     delta = close.diff()
     gain = delta.clip(lower=0)
@@ -46,79 +47,72 @@ def get_signal(stock):
     close = close.dropna()
     volume = volume.dropna()
 
-    # RSI
     rsi_series = calculate_rsi(close).dropna()
     if len(rsi_series) == 0:
         return "HOLD", 0, 0
 
     rsi = float(rsi_series.iloc[-1])
 
-    # Price
     last = float(close.iloc[-1])
     prev = float(close.iloc[-2])
-
-    # Breakout
     recent_high = float(close.iloc[-6:-1].max())
 
-    # Volume
     avg_vol = volume.iloc[-6:-1].mean()
     today_vol = volume.iloc[-1]
 
-    # 🔥 Trend filter (50 DMA vs 200 DMA)
+    # Trend filter
     ma50 = close.rolling(50).mean().iloc[-1]
     ma200 = close.rolling(200).mean().iloc[-1]
 
     uptrend = ma50 > ma200
 
-    # Final condition
-    if (last > recent_high and 
-        40 < rsi < 70 and 
-        today_vol > avg_vol and 
-        uptrend):
-
+    if last > recent_high and 40 < rsi < 70 and today_vol > avg_vol and uptrend:
         return "STRONG BUY", rsi, last
     else:
         return "HOLD", rsi, last
 
-# Open Zerodha
+# Open in Zerodha
 def open_in_kite(stock):
     stock_name = stock.replace(".NS", "")
     url = f"https://kite.zerodha.com/chart/web/tvc/NSE/{stock_name}/{stock_name}"
     webbrowser.open(url)
 
 # UI
-if st.button("🔍 Scan Stocks"):
+st.subheader("📊 Live Auto Scan")
 
-    st.subheader("📊 Scan Results")
+results = []
 
-    results = []
+for stock in stocks:
+    signal, rsi, price = get_signal(stock)
 
-    for stock in stocks:
-        signal, rsi, price = get_signal(stock)
+    if signal == "STRONG BUY":
+        results.append((stock, rsi, price))
 
-        if signal == "STRONG BUY":
-            results.append((stock, rsi, price))
+# Sort best stocks
+results = sorted(results, key=lambda x: x[1])
 
-    results = sorted(results, key=lambda x: x[1])
+if results:
+    st.success("🔥 High Quality Trades Found")
 
-    if results:
-        st.success("🔥 High Quality Trades Found")
+    for i, (stock, rsi, price) in enumerate(results[:3]):
 
-        for i, (stock, rsi, price) in enumerate(results[:3]):
+        target = price * 1.03
+        stoploss = price * 0.985
 
-            target = price * 1.03
-            stoploss = price * 0.985
+        st.write(f"### {i+1}. {stock}")
+        st.write(f"Entry: {round(price,2)}")
+        st.write(f"Target: {round(target,2)}")
+        st.write(f"Stop-loss: {round(stoploss,2)}")
+        st.write(f"RSI: {round(rsi,2)}")
 
-            st.write(f"### {i+1}. {stock}")
-            st.write(f"Entry: {round(price,2)}")
-            st.write(f"Target: {round(target,2)}")
-            st.write(f"Stop-loss: {round(stoploss,2)}")
-            st.write(f"RSI: {round(rsi,2)}")
+        if st.button(f"Open {stock} in Zerodha"):
+            open_in_kite(stock)
 
-            if st.button(f"Open {stock} in Zerodha"):
-                open_in_kite(stock)
+        st.write("---")
 
-            st.write("---")
+else:
+    st.warning("No strong trend breakout stocks right now")
 
-    else:
-        st.warning("No strong trend breakout stocks today")
+# 🔁 Auto refresh every 5 minutes
+time.sleep(300)
+st.rerun()
