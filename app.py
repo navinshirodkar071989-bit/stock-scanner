@@ -6,10 +6,10 @@ import time
 
 st.set_page_config(page_title="Smart Stock Scanner", layout="centered")
 
-st.title("📊 Smart Stock Scanner (Pro Auto Mode)")
-st.write("NIFTY50 + Defence + Renewable | Breakout + RSI + Volume + Trend")
+st.title("📊 Smart Stock Scanner (Fast Auto Mode)")
+st.write("NIFTY50 + Defence + Renewable | Optimized Fast Scan")
 
-# ---------------- STOCK LIST ---------------- #
+# -------- STOCK LIST -------- #
 
 nifty50 = [
     "RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS",
@@ -26,20 +26,12 @@ nifty50 = [
     "M&M.NS","TATAMOTORS.NS","BPCL.NS","IOC.NS"
 ]
 
-defence = [
-    "HAL.NS","BEL.NS","BEML.NS","MAZDOCK.NS","COCHINSHIP.NS",
-    "GRSE.NS","BDL.NS"
-]
+defence = ["HAL.NS","BEL.NS","BEML.NS","MAZDOCK.NS","COCHINSHIP.NS","GRSE.NS","BDL.NS"]
+renewable = ["TATAPOWER.NS","ADANIGREEN.NS","NHPC.NS","BORORENEW.NS","JSWENERGY.NS","SUZLON.NS"]
 
-renewable = [
-    "TATAPOWER.NS","ADANIGREEN.NS","NHPC.NS","BORORENEW.NS",
-    "JSWENERGY.NS","SUZLON.NS","INDIAGLYCO.NS"
-]
-
-# Merge + remove duplicates
 stocks = list(set(nifty50 + defence + renewable))
 
-# ---------------- RSI ---------------- #
+# -------- RSI -------- #
 
 def calculate_rsi(close, period=14):
     delta = close.diff()
@@ -52,68 +44,47 @@ def calculate_rsi(close, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-# ---------------- SIGNAL ---------------- #
+# -------- DOWNLOAD ALL DATA AT ONCE -------- #
 
-def get_signal(stock):
-    data = yf.download(stock, period="3mo", interval="1d", progress=False)
+data = yf.download(stocks, period="3mo", interval="1d", group_by='ticker', progress=False)
 
-    if data.empty or len(data) < 50:
-        return "HOLD", 0, 0
-
-    close = data["Close"]
-    volume = data["Volume"]
-
-    if isinstance(close, pd.DataFrame):
-        close = close.iloc[:, 0]
-    if isinstance(volume, pd.DataFrame):
-        volume = volume.iloc[:, 0]
-
-    close = close.dropna()
-    volume = volume.dropna()
-
-    rsi_series = calculate_rsi(close).dropna()
-    if len(rsi_series) == 0:
-        return "HOLD", 0, 0
-
-    rsi = float(rsi_series.iloc[-1])
-
-    last = float(close.iloc[-1])
-    recent_high = float(close.iloc[-6:-1].max())
-
-    avg_vol = volume.iloc[-6:-1].mean()
-    today_vol = volume.iloc[-1]
-
-    # Trend
-    ma50 = close.rolling(50).mean().iloc[-1]
-    ma200 = close.rolling(200).mean().iloc[-1]
-
-    uptrend = ma50 > ma200
-
-    if last > recent_high and 40 < rsi < 70 and today_vol > avg_vol and uptrend:
-        return "STRONG BUY", rsi, last
-    else:
-        return "HOLD", rsi, last
-
-# ---------------- ZERODHA ---------------- #
-
-def open_in_kite(stock):
-    stock_name = stock.replace(".NS", "")
-    url = f"https://kite.zerodha.com/chart/web/tvc/NSE/{stock_name}/{stock_name}"
-    webbrowser.open(url)
-
-# ---------------- UI ---------------- #
-
-st.subheader(f"📊 Scanning {len(stocks)} Stocks")
+st.subheader(f"📊 Scanning {len(stocks)} Stocks (Fast Mode)")
 
 results = []
 
 for stock in stocks:
-    signal, rsi, price = get_signal(stock)
+    try:
+        df = data[stock]
 
-    if signal == "STRONG BUY":
-        results.append((stock, rsi, price))
+        if df.empty or len(df) < 50:
+            continue
 
-# Sort best
+        close = df["Close"].dropna()
+        volume = df["Volume"].dropna()
+
+        rsi_series = calculate_rsi(close).dropna()
+        if len(rsi_series) == 0:
+            continue
+
+        rsi = float(rsi_series.iloc[-1])
+
+        last = float(close.iloc[-1])
+        recent_high = float(close.iloc[-6:-1].max())
+
+        avg_vol = volume.iloc[-6:-1].mean()
+        today_vol = volume.iloc[-1]
+
+        ma50 = close.rolling(50).mean().iloc[-1]
+        ma200 = close.rolling(200).mean().iloc[-1]
+
+        if last > recent_high and 40 < rsi < 70 and today_vol > avg_vol and ma50 > ma200:
+            results.append((stock, rsi, last))
+
+    except:
+        continue
+
+# -------- DISPLAY -------- #
+
 results = sorted(results, key=lambda x: x[1])
 
 if results:
@@ -131,13 +102,15 @@ if results:
         st.write(f"RSI: {round(rsi,2)}")
 
         if st.button(f"Open {stock} in Zerodha"):
-            open_in_kite(stock)
+            url = f"https://kite.zerodha.com/chart/web/tvc/NSE/{stock.replace('.NS','')}/{stock.replace('.NS','')}"
+            webbrowser.open(url)
 
         st.write("---")
 
 else:
     st.warning("No strong trend breakout stocks right now")
 
-# Auto refresh
+# -------- AUTO REFRESH -------- #
+
 time.sleep(300)
 st.rerun()
