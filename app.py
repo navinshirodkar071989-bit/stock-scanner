@@ -2,14 +2,50 @@ import streamlit as st
 import webbrowser
 import yfinance as yf
 import pandas as pd
-import time
 
 st.set_page_config(page_title="Smart Stock Scanner", layout="centered")
 
-st.title("📊 Smart Stock Scanner (Auto Mode)")
-st.write("Breakout + RSI + Volume + Trend Filter (Auto Scan Every 5 min)")
+st.title("📊 Smart Stock Scanner + Portfolio Tracker")
 
-# Stocks to scan
+# ==============================
+# 💼 PORTFOLIO SECTION
+# ==============================
+
+st.subheader("💼 My Portfolio")
+
+portfolio_stock = st.text_input("Enter Stock (e.g. RELIANCE.NS)")
+buy_price = st.number_input("Buy Price", min_value=0.0)
+quantity = st.number_input("Quantity", min_value=1, step=1)
+
+if st.button("Check Profit/Loss"):
+    if portfolio_stock:
+        data = yf.download(portfolio_stock, period="1d", progress=False)
+
+        if not data.empty:
+            current_price = float(data["Close"].iloc[-1])
+            invested = buy_price * quantity
+            current_value = current_price * quantity
+            profit = current_value - invested
+
+            st.success(f"Stock: {portfolio_stock}")
+            st.write(f"Current Price: ₹{round(current_price,2)}")
+            st.write(f"Invested: ₹{round(invested,2)}")
+            st.write(f"Current Value: ₹{round(current_value,2)}")
+
+            if profit >= 0:
+                st.success(f"Profit: ₹{round(profit,2)}")
+            else:
+                st.error(f"Loss: ₹{round(profit,2)}")
+
+        else:
+            st.error("Invalid stock name")
+
+# ==============================
+# 📊 STOCK SCANNER SECTION
+# ==============================
+
+st.subheader("📊 Live Stock Scanner")
+
 stocks = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "LT.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "ITC.NS",
@@ -54,7 +90,6 @@ def get_signal(stock):
     rsi = float(rsi_series.iloc[-1])
 
     last = float(close.iloc[-1])
-    prev = float(close.iloc[-2])
     recent_high = float(close.iloc[-6:-1].max())
 
     avg_vol = volume.iloc[-6:-1].mean()
@@ -71,14 +106,11 @@ def get_signal(stock):
     else:
         return "HOLD", rsi, last
 
-# Open in Zerodha
+# Open Zerodha
 def open_in_kite(stock):
     stock_name = stock.replace(".NS", "")
     url = f"https://kite.zerodha.com/chart/web/tvc/NSE/{stock_name}/{stock_name}"
     webbrowser.open(url)
-
-# UI
-st.subheader("📊 Live Auto Scan")
 
 results = []
 
@@ -88,7 +120,6 @@ for stock in stocks:
     if signal == "STRONG BUY":
         results.append((stock, rsi, price))
 
-# Sort best stocks
 results = sorted(results, key=lambda x: x[1])
 
 if results:
@@ -100,12 +131,12 @@ if results:
         stoploss = price * 0.985
 
         st.write(f"### {i+1}. {stock}")
-        st.write(f"Entry: {round(price,2)}")
-        st.write(f"Target: {round(target,2)}")
-        st.write(f"Stop-loss: {round(stoploss,2)}")
+        st.write(f"Entry: ₹{round(price,2)}")
+        st.write(f"Target: ₹{round(target,2)}")
+        st.write(f"Stop-loss: ₹{round(stoploss,2)}")
         st.write(f"RSI: {round(rsi,2)}")
 
-        if st.button(f"Open {stock} in Zerodha"):
+        if st.button(f"Open {stock} in Zerodha", key=stock):
             open_in_kite(stock)
 
         st.write("---")
@@ -113,6 +144,4 @@ if results:
 else:
     st.warning("No strong trend breakout stocks right now")
 
-# 🔁 Auto refresh every 5 minutes
-time.sleep(300)
-st.rerun()
+st.caption("🔄 Refresh manually for latest data")
